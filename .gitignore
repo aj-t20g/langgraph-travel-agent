@@ -47,3 +47,13 @@ Thumbs.db
 
 # LangGraph
 .langgraph_api/
+
+# Local data and test files
+data/
+*.txt
+!requirements.txt
+
+# Development utilities (not needed for cloud deployment)
+main.py
+check_preferences.py
+manage_preferences.py

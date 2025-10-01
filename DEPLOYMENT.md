@@ -15,8 +15,22 @@ This guide walks you through deploying your travel agent to LangGraph Cloud.
 The project is already configured for LangGraph Cloud with:
 
 - `langgraph.json` - Configuration file specifying the graph location
-- `requirements.txt` - Python dependencies
+- `pyproject.toml` - Python dependencies and project metadata
 - `src/travel_agent/graph.py` - Exports `travel_agent_graph`
+
+### Core Files (Required)
+```
+├── langgraph.json          # LangGraph configuration
+├── pyproject.toml          # Dependencies
+└── src/
+    └── travel_agent/
+        ├── __init__.py
+        ├── graph.py        # Main graph (exports travel_agent_graph)
+        ├── state.py        # State schema
+        ├── nodes.py        # Node functions
+        ├── tools.py        # Tools (Tavily search)
+        └── config.py       # Configuration
+```
 
 ## Step 1: Initialize Git Repository
 
@@ -41,10 +55,25 @@ Before deploying, test the graph locally:
 # Start local LangGraph server
 langgraph dev
 
-# This will start a local server at http://localhost:8123
+# This will start a local server at http://127.0.0.1:2024
+# Studio UI: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
 ```
 
 You can then test the API using curl or the LangGraph Studio UI.
+
+### What the API Returns
+
+The agent returns the complete state with all fields populated. **The most important field is `final_plan`** - a complete, polished travel guide (3000-5000 words) that you should display to users.
+
+**Key Response Fields:**
+- `final_plan` - Complete travel guide (use this!)
+- `saved_preferences` - Previous user preferences (for returning users)
+- `destination_info` - Destination research
+- `itinerary` - Day-by-day schedule
+- `accommodations` - Hotel recommendations
+- `activities` - Specific experiences
+
+See [API_RESPONSE_GUIDE.md](API_RESPONSE_GUIDE.md) for detailed response documentation.
 
 ## Step 4: Deploy to LangGraph Cloud
 
@@ -82,11 +111,12 @@ from langgraph_sdk import get_client
 # Connect to your deployment
 client = get_client(url="your-deployment-url")
 
-# Create a thread
+# Create a thread for this user
 thread = await client.threads.create()
 
-# Run the travel agent
+# Run the travel agent with user preferences
 input_data = {
+    "user_id": "user@example.com",  # Important: for loading saved preferences
     "messages": [],
     "source": "San Francisco, USA",
     "destination": "Tokyo, Japan",
@@ -94,6 +124,7 @@ input_data = {
     "end_date": "2024-06-22",
     "preferences": "Mid-range budget, local culture",
     "hobbies": "Photography, food, temples",
+    "saved_preferences": "",  # Will be populated by load_user_preferences_node
     "destination_info": "",
     "itinerary": "",
     "accommodations": "",
@@ -101,10 +132,19 @@ input_data = {
     "final_plan": ""
 }
 
+# Configure with user_id for preference storage
+config = {
+    "configurable": {
+        "thread_id": thread["thread_id"],
+        "user_id": "user@example.com"
+    }
+}
+
 run = await client.runs.create(
     thread_id=thread["thread_id"],
     assistant_id="travel_agent",
-    input=input_data
+    input=input_data,
+    config=config
 )
 
 # Wait for completion and get result
@@ -115,6 +155,11 @@ result = await client.runs.join(
 
 print(result["final_plan"])
 ```
+
+**Note on User Preferences:**
+- The graph automatically loads and saves user preferences using the `user_id`
+- LangGraph Cloud provides persistent storage for checkpoints and user data
+- Returning users will have their preferences loaded in `load_user_preferences_node`
 
 ### HTTP API
 
@@ -130,6 +175,7 @@ curl -X POST "your-deployment-url/threads/{thread_id}/runs" \
   -d '{
     "assistant_id": "travel_agent",
     "input": {
+      "user_id": "user@example.com",
       "messages": [],
       "source": "San Francisco, USA",
       "destination": "Tokyo, Japan",
@@ -137,11 +183,17 @@ curl -X POST "your-deployment-url/threads/{thread_id}/runs" \
       "end_date": "2024-06-22",
       "preferences": "Mid-range budget",
       "hobbies": "Photography, food",
+      "saved_preferences": "",
       "destination_info": "",
       "itinerary": "",
       "accommodations": "",
       "activities": "",
       "final_plan": ""
+    },
+    "config": {
+      "configurable": {
+        "user_id": "user@example.com"
+      }
     }
   }'
 

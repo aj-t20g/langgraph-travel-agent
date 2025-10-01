@@ -4,6 +4,8 @@ An intelligent travel planning agent built with LangGraph that creates personali
 
 ## Features
 
+- **Multi-User Support**: Each user identified by user_id with persistent preferences
+- **Memory Across Sessions**: Automatically saves and loads user preferences
 - **Personalized Planning**: Tailored recommendations based on your interests and hobbies
 - **Comprehensive Research**: Automated destination research using web search
 - **Day-by-Day Itinerary**: Detailed daily schedules with timing and activities
@@ -15,12 +17,14 @@ An intelligent travel planning agent built with LangGraph that creates personali
 
 The travel agent uses a LangGraph workflow with the following nodes:
 
-1. **Validate Input** - Confirms travel details
-2. **Research Destination** - Gathers information about the destination
-3. **Plan Itinerary** - Creates day-by-day schedule
-4. **Suggest Accommodations** - Recommends places to stay
-5. **Recommend Activities** - Suggests activities based on hobbies
-6. **Compile Final Plan** - Combines everything into a comprehensive guide
+1. **Load User Preferences** - Retrieves saved preferences for returning users
+2. **Validate Input** - Confirms travel details
+3. **Research Destination** - Gathers information about the destination
+4. **Plan Itinerary** - Creates day-by-day schedule
+5. **Suggest Accommodations** - Recommends places to stay
+6. **Recommend Activities** - Suggests activities based on hobbies
+7. **Compile Final Plan** - Combines everything into a comprehensive guide
+8. **Save User Preferences** - Stores preferences for future trips
 
 ## Installation
 
@@ -51,29 +55,42 @@ Edit `.env` and add your API keys:
 
 ## Usage
 
-Run the travel agent:
+### Local Testing
+
+Test the graph locally with LangGraph dev server:
 
 ```bash
-python main.py
+langgraph dev
 ```
 
-You'll be prompted to enter:
-- **Starting location**: Where you're traveling from
-- **Destination**: Where you want to go
-- **Start date**: Trip start date (YYYY-MM-DD)
-- **End date**: Trip end date (YYYY-MM-DD)
-- **Travel preferences**: Budget level, travel style, etc.
-- **Hobbies and interests**: What you enjoy doing
+This starts a local server at http://127.0.0.1:2024 with LangGraph Studio UI.
 
-The agent will then:
-1. Validate your inputs
-2. Research the destination
-3. Create a personalized itinerary
-4. Suggest accommodations
-5. Recommend activities
-6. Compile everything into a complete travel plan
+### Deploy to LangGraph Cloud
 
-The final plan will be displayed in the terminal and saved to a text file.
+See [DEPLOYMENT.md](DEPLOYMENT.md) for complete deployment instructions:
+
+```bash
+langgraph login
+langgraph deploy
+```
+
+### API Usage
+
+The agent accepts the following inputs:
+- **user_id**: Unique identifier (email/username) for saving preferences
+- **source**: Starting location
+- **destination**: Where you want to go
+- **start_date**: Trip start date (YYYY-MM-DD)
+- **end_date**: Trip end date (YYYY-MM-DD)
+- **preferences**: Budget level, travel style, etc.
+- **hobbies**: What you enjoy doing
+
+The agent returns:
+- **final_plan**: Complete travel guide (3000-5000 words) ← **Use this!**
+- **saved_preferences**: Previous preferences for returning users
+- Plus: destination_info, itinerary, accommodations, activities
+
+See [API_RESPONSE_GUIDE.md](API_RESPONSE_GUIDE.md) for detailed response documentation.
 
 ## Example
 
@@ -91,20 +108,22 @@ The agent will create a comprehensive 7-day Tokyo itinerary with photography spo
 ## Project Structure
 
 ```
-langgraph-my-travelagent/
+langgraph-t20g-travelagent/
 ├── src/
 │   └── travel_agent/
 │       ├── __init__.py
-│       ├── state.py          # State schema definition
-│       ├── tools.py          # Travel research tools
-│       ├── nodes.py          # Workflow node functions
-│       ├── graph.py          # LangGraph workflow
+│       ├── state.py          # State schema (includes user_id)
+│       ├── tools.py          # Travel research tools (Tavily)
+│       ├── nodes.py          # Memory-enabled workflow nodes
+│       ├── graph.py          # LangGraph workflow (exports travel_agent_graph)
 │       └── config.py         # Configuration management
-├── main.py                   # CLI entry point
+├── langgraph.json           # LangGraph Cloud configuration
 ├── pyproject.toml           # Project dependencies
-├── .env.example             # Environment variables template
+├── .env                     # Environment variables (gitignored)
 ├── .gitignore              # Git ignore rules
-└── README.md               # This file
+├── README.md               # This file
+├── DEPLOYMENT.md           # Deployment guide
+└── API_RESPONSE_GUIDE.md   # API response documentation
 ```
 
 ## Requirements

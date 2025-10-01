@@ -1,7 +1,9 @@
 """Node functions for the travel agent workflow."""
 
+import json
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
+from langgraph.store.base import BaseStore
 
 from .state import TravelAgentState
 from .tools import TRAVEL_TOOLS
@@ -22,6 +24,98 @@ def create_llm(use_tools: bool = False):
     return llm
 
 
+def load_user_preferences_node(state: TravelAgentState, *, store: BaseStore) -> TravelAgentState:
+    """Load user preferences from memory store.
+
+    Args:
+        state: Current state
+        store: LangGraph memory store
+
+    Returns:
+        Updated state with loaded preferences
+    """
+    user_id = state.get("user_id", "")
+    saved_preferences = ""
+
+    if user_id and store:
+        try:
+            # Define namespace for this user's preferences
+            namespace = ("user_preferences", user_id)
+
+            # Search for stored preferences
+            memories = store.search(namespace)
+
+            if memories:
+                # Get the most recent preference entry
+                latest_memory = memories[0]
+                preference_data = latest_memory.value
+
+                saved_preferences = f"""
+Previous Travel Preferences Found:
+- Preferred Travel Style: {preference_data.get('preferences', 'Not specified')}
+- Interests/Hobbies: {preference_data.get('hobbies', 'Not specified')}
+- Past Destinations: {preference_data.get('past_destinations', [])}
+"""
+        except Exception as e:
+            # If memory retrieval fails, continue without saved preferences
+            print(f"Note: Could not load user preferences: {e}")
+
+    return {
+        **state,
+        "saved_preferences": saved_preferences,
+    }
+
+
+def save_user_preferences_node(state: TravelAgentState, *, store: BaseStore) -> TravelAgentState:
+    """Save user preferences to memory store for future sessions.
+
+    Args:
+        state: Current state
+        store: LangGraph memory store
+
+    Returns:
+        Updated state (unchanged)
+    """
+    user_id = state.get("user_id", "")
+
+    if user_id and store:
+        try:
+            # Define namespace for this user's preferences
+            namespace = ("user_preferences", user_id)
+
+            # Try to get existing preferences to update past destinations
+            past_destinations = []
+            existing_memories = store.search(namespace)
+            if existing_memories:
+                past_destinations = existing_memories[0].value.get("past_destinations", [])
+
+            # Add current destination if not already in the list
+            current_destination = state.get("destination", "")
+            if current_destination and current_destination not in past_destinations:
+                past_destinations.append(current_destination)
+                # Keep only last 5 destinations
+                past_destinations = past_destinations[-5:]
+
+            # Store updated preferences
+            preference_data = {
+                "preferences": state.get("preferences", ""),
+                "hobbies": state.get("hobbies", ""),
+                "past_destinations": past_destinations,
+            }
+
+            # Save to memory store
+            store.put(
+                namespace,
+                key="preferences",
+                value=preference_data,
+            )
+        except Exception as e:
+            # If memory save fails, continue without saving
+            print(f"Note: Could not save user preferences: {e}")
+
+    return state
+
+
 def validate_input_node(state: TravelAgentState) -> TravelAgentState:
     """Validate and confirm the travel details with the user.
 
@@ -31,13 +125,16 @@ def validate_input_node(state: TravelAgentState) -> TravelAgentState:
     Returns:
         Updated state with validation message
     """
+    saved_prefs = state.get('saved_preferences', '')
+    saved_prefs_msg = f"\n{saved_prefs}" if saved_prefs else ""
+
     validation_message = f"""
 Travel Details Received:
 - Source: {state.get('source', 'Not provided')}
 - Destination: {state.get('destination', 'Not provided')}
 - Dates: {state.get('start_date', 'Not provided')} to {state.get('end_date', 'Not provided')}
 - Preferences: {state.get('preferences', 'Not provided')}
-- Hobbies/Interests: {state.get('hobbies', 'Not provided')}
+- Hobbies/Interests: {state.get('hobbies', 'Not provided')}{saved_prefs_msg}
 
 I'll now create a personalized travel plan for you!
 """
